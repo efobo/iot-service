@@ -1,0 +1,150 @@
+version: "3.9"
+
+services:
+  elasticsearch:
+    image: elasticsearch:7.1.0
+    volumes:
+      - ./esdata:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - "discovery.type=single-node"
+    networks:
+      - default
+
+  logstash:
+    build:
+      context: .
+      dockerfile: logstash/Dockerfile
+    ports:
+      - "9600:9600"
+      - "5228:5228"
+    environment:
+      LOGSTASH_PORT: 5228
+      LOGSTASH_INDEX: "test-index"
+      ELASTIC_HOST: "elasticsearch:9200"
+      ELASTIC_USERNAME: "elastic"
+      ELASTIC_PASSWORD: "elastic"
+    networks:
+      - default
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9600" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kibana:
+    image: kibana:7.1.0
+    hostname: kibana
+    ports:
+      - "5601:5601"
+    networks:
+      - default
+    depends_on:
+      - elasticsearch
+    links:
+      - elasticsearch
+    environment:
+      ELASTIC_HOST: "http://elasticsearch:9200"
+      ELASTIC_USERNAME: "elastic"
+      ELASTIC_PASSWORD: "elastic"
+
+  mongo:
+    image: mongo:5.0
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - default
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.runCommand({ ping: 1 })" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: 'rabbitmq'
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
+      - ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+    networks:
+      - default
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - default
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+        - default
+
+  iot-controller:
+    container_name: iot-controller
+    build:
+      context: ./iot-controller
+      dockerfile: Dockerfile
+    depends_on:
+      logstash:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - default
+    environment:
+      ELASTIC_HOST: "elasticsearch:9200"
+      LOGSTASH_HOST: "logstash:5228"
+      DB_URL: "mongodb://mongo:27017"
+      DB_NAME: "iot"
+      COLLECTION_NAME: "messages"
+    ports:
+      - "50051:50051"
+
+  rule-engine:
+    container_name: rule-engine
+    build:
+      context: ./rule-engine
+      dockerfile: Dockerfile
+    depends_on:
+      logstash:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - default
+    environment:
+      ELASTIC_HOST: "elasticsearch:9200"
+      LOGSTASH_HOST: "logstash:5228"
+    ports:
+      - "8080:8080"
+
+networks:
+  default:
+    driver: bridge
+
+volumes:
+  esdata:
+    driver: local
+  mongodata:
+    driver: local
