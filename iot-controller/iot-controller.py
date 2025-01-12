@@ -4,8 +4,10 @@ from pymongo import MongoClient
 import pika
 import json
 import logging
+import logstash
 
 # Настройка логирования
+'''
 logging.basicConfig(
     level=logging.INFO,  # Уровень логирования (можно изменить на DEBUG для подробных логов)
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -13,7 +15,14 @@ logging.basicConfig(
         logging.StreamHandler(),  # Логи в консоль
     ]
 )
-logger = logging.getLogger("IoT Controller")
+'''
+
+LOGSTASH_HOST = 'logstash'
+LOGSTASH_PORT = 5228
+
+logger = logging.getLogger('python-logstash-logger')
+logstash_handler = logstash.TCPLogstashHandler(LOGSTASH_HOST, LOGSTASH_PORT, version=1)
+logger.addHandler(logstash_handler)
 
 app = FastAPI()
 
@@ -51,7 +60,7 @@ async def receive_data(data: dict):
         # Сохранение в MongoDB
         collection.insert_one(data)
         logger.info(f"Data saved to MongoDB: {data}")
-
+        data['_id'] = str(data['_id'])
         # Публикация в RabbitMQ
         channel.basic_publish(exchange='', routing_key='iot_data', body=json.dumps(data))
         logger.info(f"Data published to RabbitMQ: {data}")

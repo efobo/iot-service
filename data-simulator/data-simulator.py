@@ -1,84 +1,59 @@
+
+import requests
 import time
 import random
-import json
-import logging
-import pika
 import argparse
+from threading import Thread
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,  # Уровень логирования: INFO, DEBUG, ERROR
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),  # Логи в консоль
-    ]
-)
-logger = logging.getLogger("Data Simulator")
-
-def generate_data(device_id):
+def generate_data(device_id, frequency, endpoint):
     """
-    Генерация случайных данных для устройства.
-    """
-    data = {
-        "device_id": device_id,
-        "field_a": random.randint(0, 10),
-        "timestamp": time.time()
-    }
-    logger.debug(f"Generated data for device {device_id}: {data}")
-    return data
-
-def send_data_to_rabbitmq(message, channel):
-    """
-    Отправка данных в очередь RabbitMQ.
-    """
-    try:
-        channel.basic_publish(exchange='', routing_key='iot_data', body=json.dumps(message))
-        logger.info(f"Sent message to RabbitMQ: {message}")
-    except Exception as e:
-        logger.error(f"Failed to send message to RabbitMQ: {e}")
-
-def main(device_count, message_rate):
-    """
-    Основная функция симуляции данных.
-    """
-    logger.info(f"Starting Data Simulator with {device_count} devices, {message_rate} messages per second.")
+    Генерирует данные для устройства и отправляет их на заданный эндпоинт.
     
-    # Подключение к RabbitMQ
-    try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
-        channel = connection.channel()
-        channel.queue_declare(queue='iot_data')
-        logger.info("Connected to RabbitMQ.")
-    except Exception as e:
-        logger.error(f"Failed to connect to RabbitMQ: {e}")
-        return
+    Args:
+        device_id (int): Идентификатор устройства.
+        frequency (float): Частота сообщений (в сообщениях в секунду).
+        endpoint (str): URL эндпоинта IoT Controller.
+    """
+    interval = 1 / frequency
+    while True:
+        data = {
+            "device_id": device_id,
+            "field_a": random.randint(0, 10),  # Генерация случайного значения
+        }
+        try:
+            response = requests.post(endpoint, json=data)
+            if response.status_code == 200:
+                print(f"[Device {device_id}] Data sent: {data}")
+            else:
+                print(f"[Device {device_id}] Error: {response.status_code} - {response.text}")
+        except Exception as e:
+            print(f"[Device {device_id}] Failed to send data: {e}")
+        time.sleep(interval)
 
-    devices = list(range(1, device_count + 1))
-    interval = 1 / message_rate
-
+def main():
+    """
+    parser = argparse.ArgumentParser(description="Data Simulator for IoT devices.")
+    parser.add_argument("--devices", type=int, default=10, help="Количество устройств")
+    parser.add_argument("--frequency", type=float, default=1.0, help="Частота сообщений (в сообщениях в секунду)")
+    parser.add_argument("--endpoint", type=str, required=True, help="URL эндпоинта IoT Controller")
+    args = parser.parse_args()
+    """
+    threads = []
+    for device_id in range(1, 100 + 1):
+        thread = Thread(target=generate_data, args=(device_id, 1, "http://localhost:50051/data"))
+        thread.daemon = True
+        threads.append(thread)
+        thread.start()
+    
+    # Ожидание завершения всех потоков
     try:
-        while True:
-            for device_id in devices:
-                message = generate_data(device_id)
-                send_data_to_rabbitmq(message, channel)
-                time.sleep(interval)
+        for thread in threads:
+            thread.join()
     except KeyboardInterrupt:
-        logger.info("Data Simulator stopped by user.")
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-    finally:
-        connection.close()
-        logger.info("Connection to RabbitMQ closed.")
+        print("Data Simulator stopped.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Data Simulator for IoT system.")
-    parser.add_argument(
-        "--devices", type=int, required=True, help="Number of devices to simulate."
-    )
-    parser.add_argument(
-        "--rate", type=float, required=True, help="Messages per second per device."
-    )
-    args = parser.parse_args()
-    
-    main(args.devices, args.rate)
+    main()
+
+
 

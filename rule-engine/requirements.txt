@@ -2,3 +2,4 @@ fastapi
 uvicorn
 pika
 pymongo
+python-logstash~=0.4.8

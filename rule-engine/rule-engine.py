@@ -3,6 +3,7 @@ from pymongo import MongoClient
 import json
 from collections import defaultdict
 import logging
+import logstash
 
 # Настройка логирования
 logging.basicConfig(
@@ -12,8 +13,13 @@ logging.basicConfig(
         logging.StreamHandler(),  # Логи в консоль
     ]
 )
+LOGSTASH_HOST = 'logstash'
+LOGSTASH_PORT = 5228
+
 logger = logging.getLogger("Rule Engine")
 
+logstash_handler = logstash.TCPLogstashHandler(LOGSTASH_HOST, LOGSTASH_PORT, version=1)
+logger.addHandler(logstash_handler)
 # Подключение к MongoDB
 try:
     mongo_client = MongoClient("mongodb://mongo:27017")
