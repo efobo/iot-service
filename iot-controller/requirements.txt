@@ -2,4 +2,5 @@ fastapi
 uvicorn
 pika
 pymongo
+prometheus_client
 python-logstash~=0.4.8
