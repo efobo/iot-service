@@ -4,6 +4,16 @@ import json
 from collections import defaultdict
 import logging
 import logstash
+from dotenv import load_dotenv
+
+load_dotenv()
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB = os.getenv("MONGO_DB")
+MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
+RABBITMQ_QUEUE = os.getenv("RABBITMQ_QUEUE")
+LOGSTASH_HOST = os.getenv("LOGSTASH_HOST")
+LOGSTASH_PORT = int(os.getenv("LOGSTASH_PORT"))
 
 # Настройка логирования
 logging.basicConfig(
@@ -13,8 +23,7 @@ logging.basicConfig(
         logging.StreamHandler(),
     ]
 )
-LOGSTASH_HOST = 'logstash'
-LOGSTASH_PORT = 5228
+
 
 logger = logging.getLogger("Rule Engine")
 
@@ -22,9 +31,9 @@ logstash_handler = logstash.TCPLogstashHandler(LOGSTASH_HOST, LOGSTASH_PORT, ver
 logger.addHandler(logstash_handler)
 # Подключение к MongoDB
 try:
-    mongo_client = MongoClient("mongodb://mongo:27017")
-    db = mongo_client["iot"]
-    alerts = db["alerts"]
+    mongo_client = MongoClient(MONGO_URI)
+    db = mongo_client[MONGO_DB]
+    collection = db[MONGO_COLLECTION]
     logger.info("Connected to MongoDB successfully.")
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {e}")
@@ -32,9 +41,9 @@ except Exception as e:
 
 # Подключение к RabbitMQ
 try:
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
     channel = connection.channel()
-    channel.queue_declare(queue='iot_data')
+    channel.queue_declare(queue=RABBITMQ_QUEUE)
     logger.info("Connected to RabbitMQ successfully.")
 except Exception as e:
     logger.error(f"Failed to connect to RabbitMQ: {e}")
@@ -54,7 +63,7 @@ def process_instant_rule(data):
                 "rule": "field_a > 5",
                 "timestamp": data.get("timestamp")
             }
-            alerts.insert_one(alert)
+            collection.insert_one(alert)
             logger.info(f"Instant rule triggered: {alert}")
     except Exception as e:
         logger.error(f"Error processing instant rule: {e}")
@@ -76,7 +85,7 @@ def process_continuous_rule(data):
                     "rule": "field_a > 5 for 10 messages",
                     "timestamp": data.get("timestamp")
                 }
-                alerts.insert_one(alert)
+                collection.insert_one(alert)
                 logger.info(f"Continuous rule triggered: {alert}")
     except Exception as e:
         logger.error(f"Error processing continuous rule: {e}")

@@ -1,4 +1,3 @@
-
 import requests
 import time
 import random
@@ -18,7 +17,7 @@ def generate_data(device_id, frequency, endpoint):
     while True:
         data = {
             "device_id": device_id,
-            "field_a": random.randint(0, 10),  # Генерация случайного значения
+            "field_a": random.randint(0, 10),
         }
         try:
             response = requests.post(endpoint, json=data)
@@ -31,20 +30,19 @@ def generate_data(device_id, frequency, endpoint):
         time.sleep(interval)
 
 def main():
-    """
     parser = argparse.ArgumentParser(description="Data Simulator for IoT devices.")
     parser.add_argument("--devices", type=int, default=10, help="Количество устройств")
     parser.add_argument("--frequency", type=float, default=1.0, help="Частота сообщений (в сообщениях в секунду)")
     parser.add_argument("--endpoint", type=str, required=True, help="URL эндпоинта IoT Controller")
     args = parser.parse_args()
-    """
+
     threads = []
-    for device_id in range(1, 100 + 1):
-        thread = Thread(target=generate_data, args=(device_id, 1, "http://localhost:50051/data"))
+    for device_id in range(1, args.devices + 1):
+        thread = Thread(target=generate_data, args=(device_id, args.frequency, args.endpoint))
         thread.daemon = True
         threads.append(thread)
         thread.start()
-    
+
     # Ожидание завершения всех потоков
     try:
         for thread in threads:
@@ -54,6 +52,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-

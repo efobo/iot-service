@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
-from prometheus_client import Counter, Histogram, generate_latest, REGISTRY
+from prometheus_client import Counter, Histogram, generate_latest
 from pymongo import MongoClient
 import pika
 import json
@@ -7,10 +7,19 @@ import logging
 import logstash
 import time
 from fastapi.responses import PlainTextResponse
+from dotenv import load_dotenv
+import os
 
-# Настройка логирования
-LOGSTASH_HOST = 'logstash'
-LOGSTASH_PORT = 5228
+load_dotenv()
+
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB = os.getenv("MONGO_DB")
+MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
+RABBITMQ_QUEUE = os.getenv("RABBITMQ_QUEUE")
+LOGSTASH_HOST = os.getenv("LOGSTASH_HOST")
+LOGSTASH_PORT = int(os.getenv("LOGSTASH_PORT"))
+APP_PORT = int(os.getenv("APP_PORT"))
 
 logger = logging.getLogger('python-logstash-logger')
 logstash_handler = logstash.TCPLogstashHandler(LOGSTASH_HOST, LOGSTASH_PORT, version=1)
@@ -40,21 +49,19 @@ RABBITMQ_OPERATIONS = Counter(
     ["operation", "status"]
 )
 
-# Подключение к MongoDB
 try:
-    mongo_client = MongoClient("mongodb://mongo:27017")
-    db = mongo_client["iot"]
-    collection = db["messages"]
+    mongo_client = MongoClient(MONGO_URI)
+    db = mongo_client[MONGO_DB]
+    collection = db[MONGO_COLLECTION]
     logger.info("Connected to MongoDB successfully.")
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {e}")
     raise
 
-# Подключение к RabbitMQ
 try:
-    rabbitmq_connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+    rabbitmq_connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
     channel = rabbitmq_connection.channel()
-    channel.queue_declare(queue='iot_data')
+    channel.queue_declare(queue=RABBITMQ_QUEUE)
     logger.info("Connected to RabbitMQ successfully.")
 except Exception as e:
     logger.error(f"Failed to connect to RabbitMQ: {e}")
@@ -64,7 +71,6 @@ except Exception as e:
 async def receive_data(data: dict, request: Request):
     start_time = time.time()
     try:
-        # Логирование входящих данных
         logger.info(f"Received data: {data}")
 
         # Валидация данных
@@ -85,7 +91,7 @@ async def receive_data(data: dict, request: Request):
         # Публикация в RabbitMQ
         try:
             data['_id'] = str(data['_id'])
-            channel.basic_publish(exchange='', routing_key='iot_data', body=json.dumps(data))
+            channel.basic_publish(exchange='', routing_key=RABBITMQ_QUEUE, body=json.dumps(data))
             logger.info(f"Data published to RabbitMQ: {data}")
             RABBITMQ_OPERATIONS.labels(operation="publish", status="success").inc()
         except Exception as e:
@@ -104,12 +110,12 @@ async def receive_data(data: dict, request: Request):
 
 @app.get("/metrics")
 async def metrics():
-    # Возвращаем текущие метрики в формате Prometheus
+    # Возвращаем метрики в формате Prometheus
     return PlainTextResponse(generate_latest(), media_type="text/plain")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=50051)
+    uvicorn.run(app, host=0.0.0.0, port=APP_PORT)
 
 
 

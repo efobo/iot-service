@@ -2,10 +2,6 @@
 
 Команда для запуска
 <br>
-```
-python3 data-simulator.py --devices 100 --frequency 1 --endpoint http://<iot-controller-host>:50051/data
-```
-<br>
 
 ```
 python data-simulator.py --devices 100 --frequency 1 --endpoint http://localhost:50051/data
